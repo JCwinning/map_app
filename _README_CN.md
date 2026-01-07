@@ -8,7 +8,7 @@
 
 # 在线体验：
 
-https://chinamap.streamlit.app/
+https://china-map.streamlit.app/
 
 
 ## 功能特点

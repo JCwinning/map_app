@@ -8,7 +8,7 @@ A map-based shop management application built with Streamlit and Folium, allowin
 
 ## Live Demo
 
-https://chinamap.streamlit.app/
+https://china-map.streamlit.app/
 
 ## Features
 
