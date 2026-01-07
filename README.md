@@ -4,7 +4,7 @@
 
 A map-based shop management application built with Streamlit and Folium, allowing users to manage shop data in CSV (local) or Supabase (cloud) and visualize them on an interactive map with Gaode (Amap) tiles.
 
-![Screenshot](images/0.png)
+![Screenshot](images/Picture3.png)
 
 ## Live Demo
 
@@ -154,8 +154,8 @@ map_app/
 
 ## Screenshots
 
-![Map View](static/screenshots/map_view.png)
-![Table View](static/screenshots/table_view.png)
+![Map View](images/Picture1.png)
+![Table View](images/Picture2.png)
 
 ## Dependencies
 

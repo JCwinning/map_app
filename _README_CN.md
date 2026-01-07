@@ -4,7 +4,7 @@
 
 基于 Streamlit 和 Folium 构建的地图店铺管理应用，允许用户在 CSV（本地）或 Supabase（云端）中管理店铺数据，并在高德地图图块上可视化展示。
 
-![Screenshot](images/0.png)
+![Screenshot](images/Picture3.png)
 
 # 在线体验：
 
@@ -155,8 +155,8 @@ map_app/
 
 ## 界面截图
 
-![地图视图](static/screenshots/map_view.png)
-![表格视图](static/screenshots/table_view.png)
+![地图视图](images/Picture1.png)
+![表格视图](images/Picture2.png)
 
 ## 依赖项
 
