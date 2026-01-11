@@ -63,53 +63,8 @@ def init_session_state():
 
 def handle_oauth_callback():
     """Handle the redirect back from Supabase OAuth."""
-    # Handle the OAuth code in the URL
-    if "code" in st.query_params:
-        code = st.query_params["code"]
-        verifier = st.session_state.get("pkce_verifier")
-        
-        try:
-            # We explicitly pass the verifier that we saved before redirecting
-            if verifier:
-                res = st.session_state.supabase.auth.exchange_code_for_session({
-                    "auth_code": code,
-                    "code_verifier": verifier
-                })
-            else:
-                # Fallback to automatic exchange
-                res = st.session_state.supabase.auth.exchange_code_for_session({
-                    "auth_code": code,
-                })
-
-            if res and res.user:
-                st.session_state.user = res.user
-                st.session_state.data = None # Force reload
-                st.session_state.auth_view = None # Close dialog
-                # Cleanup verifier
-                if "pkce_verifier" in st.session_state:
-                    del st.session_state["pkce_verifier"]
-                try:
-                    st.query_params.clear()
-                except:
-                    pass
-                st.rerun()
-        except Exception as e:
-            # Check if session was already established anyway
-            session = st.session_state.supabase.auth.get_session()
-            if session and session.user:
-                st.session_state.user = session.user
-                st.session_state.auth_view = None
-                try:
-                    st.query_params.clear()
-                except:
-                    pass
-                st.rerun()
-            else:
-                 st.error(f"Google 登录失败: {str(e)}")
-                 try:
-                    st.query_params.clear()
-                 except:
-                    pass
+    # Disabled for now
+    pass
 
 @st.dialog("🔒 用户登录")
 def login_dialog():
@@ -123,48 +78,12 @@ def login_dialog():
 
     st.markdown("<div style='text-align: center; margin: 10px 0;'>或</div>", unsafe_allow_html=True)
     
-    # Google Login Button
-    try:
-        # Determine the base URL
-        # For local development, it's usually localhost:8501 or 8503.
-        # For production, it is https://china-map.streamlit.app/
-        # We can try to detect or just set it based on a simple check or environment variable.
-        
-        # Default to the production URL if we are not clearly on localhost
-        # (You can also set this in .env)
-        redirect_url = "https://china-map.streamlit.app/"
-        
-        # If running locally (simple check), override
-        # Note: This is a hacky check; ideally use an ENV var like APP_URL
-        if "localhost" in str(st.query_params) or os.getenv("IS_LOCAL"):
-             redirect_url = "http://localhost:8503" # Or 8501
-        
-        # FORCE override for testing per your request
-        # redirect_url = "http://localhost:8503" 
-        
-        # Better strategy: Use the production URL by default now that you gave it to me
-        # But for your local testing to work, you must add http://localhost:8503 to Supabase Redirect URLs
-        # Since I cannot see your browser URL bar for sure, I will let you toggle or set it via ENV.
-        # For now, I'll update it to check an environment variable or default to the hosted one.
-        
-        redirect_url = os.getenv("APP_URL", "https://china-map.streamlit.app/")
-
-        res = st.session_state.supabase.auth.sign_in_with_oauth({
-            "provider": "google",
-            "options": {
-                "redirectTo": redirect_url,
-                "skip_browser_redirect": True
-            }
-        })
-        
-        # Save the code_verifier
-        if hasattr(res, 'code_verifier'):
-            st.session_state.pkce_verifier = res.code_verifier
-
-        if res.url:
-            st.link_button("🚀 使用 Google 账号登录", res.url, use_container_width=True)
-    except Exception as e:
-        st.warning(f"Google 登录暂时不可用: {str(e)}")
+    # Google Login Button (Temporarily Disabled)
+    st.info("Google 登录暂时关闭")
+    # try:
+    #    ... (Google login code commented out) ...
+    # except Exception as e:
+    #    st.warning(f"Google 登录暂时不可用: {str(e)}")
 
     st.divider()
     if st.button("没有账号？去注册", use_container_width=True):
