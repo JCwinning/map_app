@@ -76,16 +76,17 @@ def login_dialog():
         if submit:
             authenticate_user(email, password)
 
-    st.markdown("<div style='text-align: center; margin: 10px 0;'>或</div>", unsafe_allow_html=True)
+    #st.markdown("<div style='text-align: center; margin: 10px 0;'>或</div>", unsafe_allow_html=True)
     
     # Google Login Button (Temporarily Disabled)
-    st.info("Google 登录暂时关闭")
+    #st.info("Google 登录暂时关闭")
     # try:
     #    ... (Google login code commented out) ...
     # except Exception as e:
     #    st.warning(f"Google 登录暂时不可用: {str(e)}")
 
-    st.divider()
+    #st.divider()
+    
     if st.button("没有账号？去注册", use_container_width=True):
         st.session_state.auth_view = 'signup'
         st.rerun()
