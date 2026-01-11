@@ -37,16 +37,106 @@ def init_supabase():
 
 def init_session_state():
     init_supabase()
+    # Handle OAuth callback if present
+    handle_oauth_callback()
+    
     if 'user' not in st.session_state:
-        st.session_state.user = None
+        # Check if there's an existing session in the supabase client
+        try:
+            session = st.session_state.supabase.auth.get_session()
+            if session:
+                st.session_state.user = session.user
+            else:
+                st.session_state.user = None
+        except:
+            st.session_state.user = None
+            
     if 'data' not in st.session_state:
         st.session_state.data = None
     if 'auth_view' not in st.session_state:
-        st.session_state.auth_view = 'login' # 'login' or 'signup'
+        st.session_state.auth_view = None # 'login' or 'signup'
     if 'selected_shop_index' not in st.session_state:
         st.session_state.selected_shop_index = None
     if 'last_click_data' not in st.session_state:
         st.session_state.last_click_data = None
+
+def handle_oauth_callback():
+    """Handle the redirect back from Supabase OAuth."""
+    # In newer Streamlit, st.query_params is a dict-like object
+    if "code" in st.query_params:
+        code = st.query_params["code"]
+        try:
+            # Exchange the code for a session
+            # This will also set the session in the supabase client's cookies/local storage if configured
+            res = st.session_state.supabase.auth.exchange_code_for_session({
+                "auth_code": code,
+            })
+            
+            if res.user:
+                st.session_state.user = res.user
+                st.session_state.data = None # Force reload
+                st.session_state.auth_view = None # Close dialog
+                # Clear query params so they don't trigger again on next rerun
+                # Some Streamlit versions use st.query_params.clear(), others st.query_params = {}
+                try:
+                    st.query_params.clear()
+                except:
+                    pass
+                st.rerun()
+        except Exception as e:
+            st.error(f"Google 登录失败 (交换代码): {str(e)}")
+            try:
+                st.query_params.clear()
+            except:
+                pass
+
+@st.dialog("🔒 用户登录")
+def login_dialog():
+    with st.form("login_form_dialog"):
+        email = st.text_input("邮箱", key="login_email_dlg")
+        password = st.text_input("密码", type="password", key="login_password_dlg")
+        submit = st.form_submit_button("登录", use_container_width=True, type="primary")
+        
+        if submit:
+            authenticate_user(email, password)
+
+    st.markdown("<div style='text-align: center; margin: 10px 0;'>或</div>", unsafe_allow_html=True)
+    
+    # Google Login Button
+    try:
+        # We explicitly set the redirect to 8501 for Streamlit
+        redirect_url = "http://localhost:8501" 
+        
+        auth_url = st.session_state.supabase.auth.sign_in_with_oauth({
+            "provider": "google",
+            "options": {
+                "redirectTo": redirect_url
+            }
+        })
+        if auth_url.url:
+            st.link_button("🚀 使用 Google 账号登录", auth_url.url, use_container_width=True)
+    except Exception as e:
+        st.warning("Google 登录暂时不可用")
+
+    st.divider()
+    if st.button("没有账号？去注册", use_container_width=True):
+        st.session_state.auth_view = 'signup'
+        st.rerun()
+
+@st.dialog("📝 用户注册")
+def signup_dialog():
+    with st.form("signup_form_dialog"):
+        email = st.text_input("邮箱", key="signup_email_dlg")
+        password = st.text_input("密码", type="password", key="signup_password_dlg")
+        submit = st.form_submit_button("注册", use_container_width=True, type="primary")
+        
+        if submit:
+            authenticate_user(email, password, is_signup=True)
+            
+    st.divider()
+    if st.button("已有账号？去登录", use_container_width=True):
+        st.session_state.auth_view = 'login'
+        st.rerun()
 
 def authenticate_user(email, password, is_signup=False):
     supabase = st.session_state.supabase
@@ -55,13 +145,15 @@ def authenticate_user(email, password, is_signup=False):
             response = supabase.auth.sign_up({"email": email, "password": password})
             if response.user:
                 st.success("注册成功！请到邮箱点击确认链接。")
+                time.sleep(2)
                 st.session_state.auth_view = 'login'
+                st.rerun()
         else:
             response = supabase.auth.sign_in_with_password({"email": email, "password": password})
             if response.user:
                 st.session_state.user = response.user
                 st.session_state.data = None # Force reload from Cloud
-                st.success("登录成功！")
+                st.session_state.auth_view = None # Clear auth view on success
                 st.rerun()
     except Exception as e:
         st.error(f"认证失败: {str(e)}")
@@ -474,42 +566,66 @@ def get_shop_index_from_click(click_data, df):
 def main():
     init_session_state()
     
-    # Sidebar: Authentication & Navigation
+    # Sidebar: Search & Settings
     with st.sidebar:
-        st.header("👤 用户中心")
+        st.header("🔍 地点搜索")
+        with st.form(key="search_form", clear_on_submit=False):
+            search_keyword = st.text_input("地点名称", placeholder="例如: 深圳星巴克")
+            if st.form_submit_button("搜索", use_container_width=True):
+                if search_keyword:
+                    with st.spinner("正在搜索..."):
+                        results = search_shops(search_keyword)
+                        if results:
+                            st.session_state.search_results = results
+                        else:
+                            st.warning("未找到相关地点")
+                            st.session_state.search_results = []
+
+        if 'search_results' in st.session_state and st.session_state.search_results:
+            st.divider()
+            st.subheader("搜索结果")
+            for i, result in enumerate(st.session_state.search_results):
+                with st.container():
+                    st.markdown(f"**{i+1}. {result['name']}**")
+                    if result.get('city'):
+                        st.markdown(f"🏙️ 城市: {result['city']}")
+                    st.markdown(f"📍 地址: {result['address']}")
+                    st.markdown(f"🌐 坐标: {result['latitude']:.6f}, {result['longitude']:.6f}")
+                    st.markdown(f"🏷️ 类型: {result['type']}")
+
+                    if st.button(f"➕ 添加到列表", key=f"add_{i}"):
+                        st.session_state.data = add_shop_to_data(st.session_state.data, result, journey_type)
+                        if save_data(st.session_state.data):
+                            st.success(f"已添加: {result['name']}")
+                            st.rerun()
+                    st.divider()
+
+        st.divider()
+        st.header("⚙️ 地图设置")
+        journey_type = st.selectbox("Journey Type", ["Coffee", "Scenery", "Food", "Bar", "Other"], index=0)
         
+        st.divider()
+        st.header("👤 用户中心")
         if st.session_state.user:
             st.success(f"已登录: {st.session_state.user.email}")
-            if st.button("退出登录"):
+            if st.button("退出登录", use_container_width=True):
                 st.session_state.supabase.auth.sign_out()
                 st.session_state.user = None
                 st.session_state.data = None # Clear data to trigger reload
                 st.rerun()
-            st.divider()
-            st.divider()
         else:
-            tab_login, tab_signup = st.tabs(["登录", "注册"])
+            if st.button("🔐 登录 / 注册", use_container_width=True, type="primary"):
+                st.session_state.auth_view = 'login'
+                st.rerun()
             
-            with tab_login:
-                with st.form("login_form"):
-                    email = st.text_input("邮箱", key="login_email")
-                    password = st.text_input("密码", type="password", key="login_password")
-                    if st.form_submit_button("登录", use_container_width=True):
-                        authenticate_user(email, password)
-            
-            with tab_signup:
-                with st.form("signup_form"):
-                    email = st.text_input("邮箱", key="signup_email")
-                    password = st.text_input("密码", type="password", key="signup_password")
-                    if st.form_submit_button("注册", use_container_width=True):
-                        authenticate_user(email, password, is_signup=True)
-            
-            st.info("💡 当前为本地模式。登录后可切换到云端模式。")
-            #st.divider()
+            # Persist dialog if state is set
+            auth_v = st.session_state.get('auth_view')
+            if auth_v == 'login':
+                login_dialog()
+            elif auth_v == 'signup':
+                signup_dialog()
 
-        # Journey Type Selection (Always visible)
-        st.subheader("🗺️ 地图设置")
-        journey_type = st.selectbox("Journey Type", ["Coffee", "Scenery", "Food", "Bar", "Other"], index=0)
+            st.info("💡 当前为本地模式。登录后可切换到云端模式。")
 
     # Emoji mapping
     emoji_map = {
@@ -643,41 +759,7 @@ def main():
                     st.session_state.data = new_df
                     st.rerun()
 
-    # Search Sidebar (Continued)
-    with st.sidebar:
-        st.header("🔍 地点搜索")
-        with st.form(key="search_form", clear_on_submit=False):
-            search_keyword = st.text_input("地点名称", placeholder="例如: 深圳星巴克")
-            if st.form_submit_button("搜索", use_container_width=True):
-                if search_keyword:
-                    with st.spinner("正在搜索..."):
-                        results = search_shops(search_keyword)
-                        if results:
-                            st.session_state.search_results = results
-                        else:
-                            st.warning("未找到相关地点")
-                            st.session_state.search_results = []
-
-        if 'search_results' in st.session_state and st.session_state.search_results:
-            st.markdown("---")
-            st.subheader("搜索结果")
-            for i, result in enumerate(st.session_state.search_results):
-                with st.container():
-                    st.markdown(f"**{i+1}. {result['name']}**")
-                    if result.get('city'):
-                        st.markdown(f"🏙️ 城市: {result['city']}")
-                    st.markdown(f"📍 地址: {result['address']}")
-                    st.markdown(f"🌐 坐标: {result['latitude']:.6f}, {result['longitude']:.6f}")
-                    st.markdown(f"🏷️ 类型: {result['type']}")
-
-                    # Add to table button
-                    if st.button(f"➕ 添加到列表", key=f"add_{i}"):
-                        st.session_state.data = add_shop_to_data(st.session_state.data, result, journey_type)
-                        if save_data(st.session_state.data):
-                            st.success(f"已添加: {result['name']}")
-                            st.rerun()
-
-                    st.markdown("---")
+    # Search and User Center moved to top of main for better sidebar flow
 
 if __name__ == "__main__":
     main()
