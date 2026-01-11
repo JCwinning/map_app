@@ -41,8 +41,9 @@ def init_session_state():
     handle_oauth_callback()
     
     if 'user' not in st.session_state:
-        # Check if there's an existing session in the supabase client
         try:
+            # First check if handle_oauth_callback already set the user
+            # If not, check the backend for a persistent session
             session = st.session_state.supabase.auth.get_session()
             if session:
                 st.session_state.user = session.user
@@ -62,33 +63,53 @@ def init_session_state():
 
 def handle_oauth_callback():
     """Handle the redirect back from Supabase OAuth."""
-    # In newer Streamlit, st.query_params is a dict-like object
+    # Handle the OAuth code in the URL
     if "code" in st.query_params:
         code = st.query_params["code"]
+        verifier = st.session_state.get("pkce_verifier")
+        
         try:
-            # Exchange the code for a session
-            # This will also set the session in the supabase client's cookies/local storage if configured
-            res = st.session_state.supabase.auth.exchange_code_for_session({
-                "auth_code": code,
-            })
-            
-            if res.user:
+            # We explicitly pass the verifier that we saved before redirecting
+            if verifier:
+                res = st.session_state.supabase.auth.exchange_code_for_session({
+                    "auth_code": code,
+                    "code_verifier": verifier
+                })
+            else:
+                # Fallback to automatic exchange
+                res = st.session_state.supabase.auth.exchange_code_for_session({
+                    "auth_code": code,
+                })
+
+            if res and res.user:
                 st.session_state.user = res.user
                 st.session_state.data = None # Force reload
                 st.session_state.auth_view = None # Close dialog
-                # Clear query params so they don't trigger again on next rerun
-                # Some Streamlit versions use st.query_params.clear(), others st.query_params = {}
+                # Cleanup verifier
+                if "pkce_verifier" in st.session_state:
+                    del st.session_state["pkce_verifier"]
                 try:
                     st.query_params.clear()
                 except:
                     pass
                 st.rerun()
         except Exception as e:
-            st.error(f"Google 登录失败 (交换代码): {str(e)}")
-            try:
-                st.query_params.clear()
-            except:
-                pass
+            # Check if session was already established anyway
+            session = st.session_state.supabase.auth.get_session()
+            if session and session.user:
+                st.session_state.user = session.user
+                st.session_state.auth_view = None
+                try:
+                    st.query_params.clear()
+                except:
+                    pass
+                st.rerun()
+            else:
+                 st.error(f"Google 登录失败: {str(e)}")
+                 try:
+                    st.query_params.clear()
+                 except:
+                    pass
 
 @st.dialog("🔒 用户登录")
 def login_dialog():
@@ -104,19 +125,26 @@ def login_dialog():
     
     # Google Login Button
     try:
-        # We explicitly set the redirect to 8501 for Streamlit
-        redirect_url = "http://localhost:8501" 
+        # Detect if we are on a specific port (defaulting to 8503 as requested)
+        redirect_url = "http://localhost:8503"
         
-        auth_url = st.session_state.supabase.auth.sign_in_with_oauth({
+        # We don't cache the auth URL too aggressively so it picks up dashboard changes
+        res = st.session_state.supabase.auth.sign_in_with_oauth({
             "provider": "google",
             "options": {
-                "redirectTo": redirect_url
+                "redirectTo": redirect_url,
+                "skip_browser_redirect": True
             }
         })
-        if auth_url.url:
-            st.link_button("🚀 使用 Google 账号登录", auth_url.url, use_container_width=True)
+        
+        # Save the code_verifier immediately
+        if hasattr(res, 'code_verifier'):
+            st.session_state.pkce_verifier = res.code_verifier
+
+        if res.url:
+            st.link_button("🚀 使用 Google 账号登录", res.url, use_container_width=True)
     except Exception as e:
-        st.warning("Google 登录暂时不可用")
+        st.warning(f"Google 登录暂时不可用: {str(e)}")
 
     st.divider()
     if st.button("没有账号？去注册", use_container_width=True):
