@@ -125,10 +125,30 @@ def login_dialog():
     
     # Google Login Button
     try:
-        # Detect if we are on a specific port (defaulting to 8503 as requested)
-        redirect_url = "http://localhost:8503"
+        # Determine the base URL
+        # For local development, it's usually localhost:8501 or 8503.
+        # For production, it is https://china-map.streamlit.app/
+        # We can try to detect or just set it based on a simple check or environment variable.
         
-        # We don't cache the auth URL too aggressively so it picks up dashboard changes
+        # Default to the production URL if we are not clearly on localhost
+        # (You can also set this in .env)
+        redirect_url = "https://china-map.streamlit.app/"
+        
+        # If running locally (simple check), override
+        # Note: This is a hacky check; ideally use an ENV var like APP_URL
+        if "localhost" in str(st.query_params) or os.getenv("IS_LOCAL"):
+             redirect_url = "http://localhost:8503" # Or 8501
+        
+        # FORCE override for testing per your request
+        # redirect_url = "http://localhost:8503" 
+        
+        # Better strategy: Use the production URL by default now that you gave it to me
+        # But for your local testing to work, you must add http://localhost:8503 to Supabase Redirect URLs
+        # Since I cannot see your browser URL bar for sure, I will let you toggle or set it via ENV.
+        # For now, I'll update it to check an environment variable or default to the hosted one.
+        
+        redirect_url = os.getenv("APP_URL", "https://china-map.streamlit.app/")
+
         res = st.session_state.supabase.auth.sign_in_with_oauth({
             "provider": "google",
             "options": {
@@ -137,7 +157,7 @@ def login_dialog():
             }
         })
         
-        # Save the code_verifier immediately
+        # Save the code_verifier
         if hasattr(res, 'code_verifier'):
             st.session_state.pkce_verifier = res.code_verifier
 
